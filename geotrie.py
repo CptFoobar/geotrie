@@ -22,6 +22,7 @@ class GeoTrie:
             raise Exception("Incorrect key length")
         if self.trie.has_node(key):
             return self.trie[key]
+        return []
 
     def clear(self):
         self.trie.clear()

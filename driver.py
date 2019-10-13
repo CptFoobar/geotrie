@@ -1,18 +1,17 @@
 import argparse
-from collections import deque
 
-from geotrie import GeoTrie
 import geopandas as gpd
-from shapely.geometry import Point, Polygon, MultiPolygon
 import os
 import logging
-from pprint import pprint
-import geohash_hilbert as ghh
 from datetime import datetime
-from geotrie_index import GeoTrieIndex, FifoQueue
+
+from shapely.geometry import Point
+
+from geotrieindex import GeoTrieIndex
 
 
 def main():
+    # TODO: Use logging
     parser = argparse.ArgumentParser(prog="GeoTrie Driver", description="Driver program for GeoTrie algorithm")
     parser.add_argument("-l", "--len-geohash", type=int, default=4,
                         help="length of geohash, between 1 and 12 (inclusive)")
@@ -29,22 +28,19 @@ def main():
         return
 
     geojson = gpd.read_file(input_path)
-    sample = geojson[:100]
-
-    # gt = GeoTrie(3)
-    # gt.insert("abc", 1)
-    # gt.insert("abc", 2)
-    # gt.insert("abc", 3)
-    # gt.insert("abdc", 3)
-    # gt.insert("xyz", 8)
-    # gt.walk()
+    sample = geojson[:30]
 
     gti = GeoTrieIndex(gh_len)
     begin = datetime.now()
-    print(begin)
-    gti.build(geojson)
+    gti.build(sample)
     t = datetime.now() - begin
-    print('took {}ms'.format(t))
+    print('building took {}s'.format(t.total_seconds()))
+    testpoint1 = Point((-73.9176514626831, 40.560473006628456))
+    testpoint2 = Point((-73.81339916011954, 40.70293833261958))
+
+    print([str(p) for p in gti.lookup(testpoint1)])
+    print([str(p) for p in gti.lookup(testpoint2)])
+
     # gti.show(False)
 
 

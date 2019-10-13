@@ -1,5 +1,5 @@
 from geopandas import GeoDataFrame
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 from shapely.geometry import shape
 from geodatapoint import GeoDataPoint
 from geotrie import GeoTrie
@@ -94,6 +94,17 @@ class GeoTrieIndex:
                 q2, q1 = q1, q2
 
         return overlaps
+
+    def lookup(self, point: Point):
+        gh = ghh.encode(*(point.coords[0]), precision=self.gh_len)
+        candidates = self.gt.search(gh)
+        for c in candidates:
+            if c.poly.contains(point):
+                return [c]
+        return []
+
+    def gh_boxes(self, gh):
+        return self.gt.search(gh)
 
     def show(self, long_format=False):
         def print_formatted(trie_dict: dict):
