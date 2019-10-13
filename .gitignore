@@ -1,3 +1,8 @@
 **/target
 .idea
 **/.DS_Store
+run_driver.sh
+.ipynb_checkpoints
+*.ipynb
+**/__pycache__
+tmp

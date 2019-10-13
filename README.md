@@ -1,6 +1,24 @@
 # GeoTries
 A geohash base Trie algorithm for geospatial indexing
 
+## Geohashes
+
+| Geohash length  | Cell width  | Cell height  |
+|-----------------|-------------|--------------|
+|       1         |	≤ 5,000km 	|	5,000km    |
+|       2         |	≤ 1,250km 	|	625km      | 
+|       3         |	≤ 156km 	|	156km      | 
+|       4         |	≤ 39.1km 	|	19.5km     | 
+|       5         |	≤ 4.89km 	|	4.89km     | 
+|       6         |	≤ 1.22km 	|	0.61km     | 
+|       7         |	≤ 153m 	    |	153m       | 
+|       8         |	≤ 38.2m 	|	19.1m      |
+|       9         |	≤ 4.77m 	|	4.77m      | 
+|      10         |	≤ 1.19m 	|	0.596m     | 
+|      11         |	≤ 149mm 	|	149mm      | 
+|      12         |	≤ 37.2mm 	|	18.6mm     | 
+
+
 ## Algorithm
 
 ### Initialization
@@ -18,13 +36,25 @@ A geohash base Trie algorithm for geospatial indexing
   shapes it intersects
 */
 function buildTree(shapes s, length l) {
-    T = new HAMTrie[polygon]
+    T = new Trie[polygon]
     for polygon p in s {
         geos = geohashesIntersecting(p, l)
         for geohash in geos {
             T.insert(geohash, p)
         }
     }
+
+/*
+  Insert into geotrie
+*/
+function Trie::insert(geohash, p) {
+    if not this.has_node(geohash) {
+        this.add_node(geohash, [])
+    }
+    node_val = this.search(geohash)
+    node_val.append(p)
+    this.set_node(geohash, node_val)
+}
 
 /*
   Find geohashes whose bounding box intersects this polygon.
@@ -53,12 +83,12 @@ function geohashIntersecting(polygon p, length l) {
         next = n.neighbours()
         for nbr in next {
             if not visited[nbr] {
-                q1.push(nbr)
+                q2.push(nbr)
             }
         }
         if q1 is empty and levelActive is true {
-            levelActive = true
-            q1.swap(q2)
+            levelActive = false
+            swap q1, q2
         }
     }
     return boxes
@@ -75,7 +105,7 @@ function geohashIntersecting(polygon p, length l) {
   and searching in geotrie.
   Iterate through polygons obtained and find if any contains point
 */
-function lookup(point p, length l, HAMTrie T) {
+function lookup(point p, length l, Trie T) {
     g = geohash(p, l)
     candidates = T.search(g)
     for c in candidates {
@@ -86,3 +116,10 @@ function lookup(point p, length l, HAMTrie T) {
     return null
 }
 ```
+
+
+## Optimization
+
+1. Use HAMTrie instead of regular Trie for space optimization
+2. Better alternative to BFS for neighbourhood scanning
+3. Check for precision of bboxes and point before comparing
