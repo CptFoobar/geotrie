@@ -3,9 +3,10 @@ from shapely.geometry import Polygon, Point
 from shapely.geometry import shape
 from geodatapoint import GeoDataPoint
 from geotrie import GeoTrie
-import geohash_hilbert as ghh
 from typing import List, Iterable
 from collections import deque
+import geohash_hilbert as ghh
+import numpy as np
 
 
 class FifoQueue:
@@ -32,31 +33,27 @@ class FifoQueue:
 
 
 class GeoTrieIndex:
-    def __init__(self, gh_len: int):
+    """A geospatial index that using GeoTries as underlying data structure"""
+
+    '''
+    Two overlap discovery algorithms are provided:
+    SUBSAMPLE_GRID: Divides bounding box of given polygon into a grid and maps select points in the grid as geohashes
+    NEIGHBOUR_BFS: Performs BFS search on centroid of given polygon till it keeps finding neighbours that intersect
+    '''
+    SUBSAMPLE_GRID = 1
+    NEIGHBOUR_BFS = 2
+
+    def __init__(self, gh_len: int, scan_algorithm=SUBSAMPLE_GRID):
         self.gh_len = gh_len
         self.gt = GeoTrie(gh_len)
+        self.scan_algorithm = scan_algorithm
 
-    def build(self, geo_df: GeoDataFrame):
-        self.gt.clear()
-        df_columns = list(geo_df.columns)
-        for i, row in geo_df.iterrows():
-            polygons: list[Polygon] = row["geometry"].geoms
-            # print('processing row', i)
-            # TODO: Check for non-polygon entries
-            for poly in polygons:
-                meta = {column: row[column] for column in list(filter(lambda x: x != "geometry", df_columns))}
-                # print('meta', meta)
-                # print('poly', poly)
-                gdp = GeoDataPoint(meta, poly)
-                geos = self.__gh_intersecting(poly)
-                # print(geos)
-                for gh in geos:
-                    # print(gh)
-                    self.gt.insert(gh, gdp)
+    def __gh_encode(self, lon, lat):
+        return ghh.encode(lon, lat, precision=self.gh_len)
 
-    def __gh_intersecting(self, poly: Polygon) -> List[str]:
+    def __neighbour_bfs(self, poly: Polygon) -> List[str]:
         centroid = poly.centroid
-        gh = ghh.encode(*(centroid.coords[0]), precision=self.gh_len)
+        gh = self.__gh_encode(*(centroid.coords[0]))
         overlaps = []
         q1 = FifoQueue()
         q1.push(gh)
@@ -78,10 +75,10 @@ class GeoTrieIndex:
                     overlaps.append(node)
                     level_active = True
 
-            nextLevel = list(ghh.neighbours(node).values())
-            # print('got {} nbrs'.format(len(nextLevel)))
+            next_level = list(ghh.neighbours(node).values())
+            # print('got {} nbrs'.format(len(next_level)))
             # input()
-            for nbr in nextLevel:
+            for nbr in next_level:
                 # REVIEW: Redundant visited checks?
                 if nbr not in discovered.keys():
                     # print('pushed nbr', nbr, 'not in', discovered.keys())
@@ -95,8 +92,52 @@ class GeoTrieIndex:
 
         return overlaps
 
+    def __matrix_geohashes(self, poly) -> List:
+        precision_box = ghh.rectangle(''.join(["0" for _ in range(self.gh_len)]))["bbox"]
+        grid_intercept = min(abs(precision_box[0] - precision_box[2]), abs(precision_box[1] - precision_box[3]))
+        poly_bbox = poly.bounds
+        subsamples = set()
+        for lon in np.arange(poly_bbox[0], poly_bbox[2] + grid_intercept, grid_intercept):
+            for lat in np.arange(poly_bbox[1], poly_bbox[3] + grid_intercept, grid_intercept):
+                subsamples.add(self.__gh_encode(lon, lat))
+        return list(subsamples)
+
+    def __subsample_grid(self, poly: Polygon) -> List[str]:
+        subsamples = self.__matrix_geohashes(poly)
+        overlaps = []
+        for gh in subsamples:
+            node_poly = shape(ghh.rectangle(gh)["geometry"])
+            if node_poly.intersects(poly):
+                overlaps.append(gh)
+        return overlaps
+
+    # TODO: return {geohash, polygon}
+    def __gh_intersecting(self, poly: Polygon) -> List[str]:
+        if self.scan_algorithm == self.SUBSAMPLE_GRID:
+            return self.__subsample_grid(poly)
+        else:
+            return self.__neighbour_bfs(poly)
+
+    def build(self, geo_df: GeoDataFrame):
+        self.gt.clear()
+        df_columns = list(geo_df.columns)
+        for i, row in geo_df.iterrows():
+            polygons: list[Polygon] = row["geometry"].geoms
+            # print('processing row', i)
+            # TODO: Check for non-polygon entries
+            for poly in polygons:
+                meta = {column: row[column] for column in list(filter(lambda x: x != "geometry", df_columns))}
+                # print('meta', meta)
+                # print('poly', poly)
+                gdp = GeoDataPoint(meta, poly)
+                geos = self.__gh_intersecting(poly)
+                # print(geos)
+                for gh in geos:
+                    # print(gh)
+                    self.gt.insert(gh, gdp)
+
     def lookup(self, point: Point):
-        gh = ghh.encode(*(point.coords[0]), precision=self.gh_len)
+        gh = self.__gh_encode(*(point.coords[0]))
         candidates = self.gt.search(gh)
         for c in candidates:
             if c.poly.contains(point):

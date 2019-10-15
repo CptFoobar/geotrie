@@ -28,9 +28,9 @@ def main():
         return
 
     geojson = gpd.read_file(input_path)
-    sample = geojson[:30]
+    sample = geojson[:1000]
 
-    gti = GeoTrieIndex(gh_len)
+    gti = GeoTrieIndex(gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
     begin = datetime.now()
     gti.build(sample)
     t = datetime.now() - begin
@@ -38,8 +38,8 @@ def main():
     testpoint1 = Point((-73.9176514626831, 40.560473006628456))
     testpoint2 = Point((-73.81339916011954, 40.70293833261958))
 
-    print([str(p) for p in gti.lookup(testpoint1)])
-    print([str(p) for p in gti.lookup(testpoint2)])
+    # print([str(p) for p in gti.lookup(testpoint1)])
+    # print([str(p) for p in gti.lookup(testpoint2)])
 
     # gti.show(False)
 
