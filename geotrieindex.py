@@ -42,6 +42,15 @@ class GeoTrieIndex:
     '''
     SUBSAMPLE_GRID = 1
     NEIGHBOUR_BFS = 2
+    TOP_DOWN = 3
+
+    _BASE64 = (
+        '0123456789'  # noqa: E262    #   10    0x30 - 0x39
+        '@'                           # +  1    0x40
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ'  # + 26    0x41 - 0x5A
+        '_'                           # +  1    0x5F
+        'abcdefghijklmnopqrstuvwxyz'  # + 26    0x61 - 0x7A
+    )                                 # = 64    0x30 - 0x7A
 
     def __init__(self, gh_len: int, scan_algorithm=SUBSAMPLE_GRID):
         self.gh_len = gh_len
@@ -51,9 +60,18 @@ class GeoTrieIndex:
     def __gh_encode(self, lon, lat):
         return ghh.encode(lon, lat, precision=self.gh_len)
 
-    def __neighbour_bfs(self, poly: Polygon) -> List[str]:
+    @classmethod
+    def __gh_intersects_poly(cls, gh: str, poly: Polygon):
+        node_poly = shape(ghh.rectangle(gh)["geometry"])
+        return node_poly.intersects(poly)
+
+    @classmethod
+    def __get_children(cls, parent: str) -> List[str]:
+        return [parent + child for child in cls._BASE64]
+
+    def __neighbour_bfs(self, poly: Polygon, precision) -> List[str]:
         centroid = poly.centroid
-        gh = self.__gh_encode(*(centroid.coords[0]))
+        gh = ghh.encode(*(centroid.coords[0]), precision=precision)
         overlaps = []
         q1 = FifoQueue()
         q1.push(gh)
@@ -64,29 +82,20 @@ class GeoTrieIndex:
 
         while not q1.empty():
             node = q1.pop()
-            # print('popped', node)
             if node not in visited.keys():
-                # print('visiting', node)
                 visited[node] = True
                 discovered[node] = True
                 node_poly = shape(ghh.rectangle(node)["geometry"])
                 if node_poly.intersects(poly):
-                    # print('node {} intersects poly'.format(node))
                     overlaps.append(node)
                     level_active = True
 
             next_level = list(ghh.neighbours(node).values())
-            # print('got {} nbrs'.format(len(next_level)))
-            # input()
             for nbr in next_level:
-                # REVIEW: Redundant visited checks?
                 if nbr not in discovered.keys():
-                    # print('pushed nbr', nbr, 'not in', discovered.keys())
                     discovered[nbr] = True
                     q2.push(nbr)
-            # print('q2', q2.size())
             if q1.empty() and level_active:
-                # print("swapping")
                 level_active = False
                 q2, q1 = q1, q2
 
@@ -111,29 +120,54 @@ class GeoTrieIndex:
                 overlaps.append(gh)
         return overlaps
 
+    def __search_gh_box(self, poly: Polygon, prefix: str) -> List[str]:
+        # Check if geohash of required length intersects polygon. if so, it is part of the solution
+        if len(prefix) == self.gh_len:
+            return [prefix] if self.__gh_intersects_poly(prefix, poly) else []
+
+        # If prefix doesn't intersect polygon, none of its children will.
+        if not self.__gh_intersects_poly(prefix, poly):
+            return []
+
+        intersects = []
+        children = self.__get_children(prefix)
+        # Recurse on all children
+        for child in children:
+            intersects.extend(self.__search_gh_box(poly, prefix+child))
+        return intersects
+
+    def __top_down_search(self, poly: Polygon) -> List[str]:
+        # find top level geohashes intersecting polygon
+        top_level = self.__neighbour_bfs(poly, 1)
+        overlaps = []
+        for tgh in top_level:
+            overlaps.extend(self.__search_gh_box(poly, tgh))
+        return []
+
     # TODO: return {geohash, polygon}
     def __gh_intersecting(self, poly: Polygon) -> List[str]:
         if self.scan_algorithm == self.SUBSAMPLE_GRID:
             return self.__subsample_grid(poly)
+        elif self.scan_algorithm == self.NEIGHBOUR_BFS:
+            return self.__neighbour_bfs(poly, self.gh_len)
+        elif self.scan_algorithm == self.TOP_DOWN:
+            a = self.__top_down_search(poly)
+            print(a)
+            return a
         else:
-            return self.__neighbour_bfs(poly)
+            raise Exception("Invalid scan algorithm")
 
     def build(self, geo_df: GeoDataFrame):
         self.gt.clear()
         df_columns = list(geo_df.columns)
         for i, row in geo_df.iterrows():
             polygons: list[Polygon] = row["geometry"].geoms
-            # print('processing row', i)
             # TODO: Check for non-polygon entries
             for poly in polygons:
                 meta = {column: row[column] for column in list(filter(lambda x: x != "geometry", df_columns))}
-                # print('meta', meta)
-                # print('poly', poly)
                 gdp = GeoDataPoint(meta, poly)
                 geos = self.__gh_intersecting(poly)
-                # print(geos)
                 for gh in geos:
-                    # print(gh)
                     self.gt.insert(gh, gdp)
 
     def lookup(self, point: Point):

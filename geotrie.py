@@ -1,6 +1,5 @@
 import pygtrie as trie
 
-
 class GeoTrie:
     ''' An implementation of GeoTrie '''
 
