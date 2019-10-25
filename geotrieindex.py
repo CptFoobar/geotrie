@@ -1,9 +1,10 @@
+from datetime import datetime
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon, Point
 from shapely.geometry import shape
 from geodatapoint import GeoDataPoint
 from geotrie import GeoTrie
-from typing import List, Iterable
+from typing import List, Iterable, Union
 from collections import deque
 import geohash_hilbert as ghh
 import numpy as np
@@ -46,11 +47,11 @@ class GeoTrieIndex:
 
     _BASE64 = (
         '0123456789'  # noqa: E262    #   10    0x30 - 0x39
-        '@'                           # +  1    0x40
+        '@'  # +  1    0x40
         'ABCDEFGHIJKLMNOPQRSTUVWXYZ'  # + 26    0x41 - 0x5A
-        '_'                           # +  1    0x5F
+        '_'  # +  1    0x5F
         'abcdefghijklmnopqrstuvwxyz'  # + 26    0x61 - 0x7A
-    )                                 # = 64    0x30 - 0x7A
+    )  # = 64    0x30 - 0x7A
 
     def __init__(self, gh_len: int, scan_algorithm=SUBSAMPLE_GRID):
         self.gh_len = gh_len
@@ -64,6 +65,11 @@ class GeoTrieIndex:
     def __gh_intersects_poly(cls, gh: str, poly: Polygon):
         node_poly = shape(ghh.rectangle(gh)["geometry"])
         return node_poly.intersects(poly)
+
+    @classmethod
+    def __gh_contains_poly(cls, gh: str, poly: Polygon):
+        node_poly = shape(ghh.rectangle(gh)["geometry"])
+        return node_poly.contains(poly)
 
     @classmethod
     def __get_children(cls, parent: str) -> List[str]:
@@ -101,6 +107,7 @@ class GeoTrieIndex:
 
         return overlaps
 
+    # TODO: Make this a generator
     def __matrix_geohashes(self, poly) -> List:
         precision_box = ghh.rectangle(''.join(["0" for _ in range(self.gh_len)]))["bbox"]
         grid_intercept = min(abs(precision_box[0] - precision_box[2]), abs(precision_box[1] - precision_box[3]))
@@ -115,8 +122,7 @@ class GeoTrieIndex:
         subsamples = self.__matrix_geohashes(poly)
         overlaps = []
         for gh in subsamples:
-            node_poly = shape(ghh.rectangle(gh)["geometry"])
-            if node_poly.intersects(poly):
+            if self.__gh_intersects_poly(gh, poly):
                 overlaps.append(gh)
         return overlaps
 
@@ -133,16 +139,31 @@ class GeoTrieIndex:
         children = self.__get_children(prefix)
         # Recurse on all children
         for child in children:
-            intersects.extend(self.__search_gh_box(poly, prefix+child))
+            intersects.extend(self.__search_gh_box(poly, child))
         return intersects
+
+    def __smallest_container(self, poly: Polygon) -> Union[str, None]:
+        centroid_coords = poly.centroid.coords[0]
+        gh_centroid = self.__gh_encode(*centroid_coords)
+        i = 0
+        while not self.__gh_contains_poly(gh_centroid, poly):
+            i += 1
+            if i == self.gh_len:
+                return None
+            gh_centroid = ghh.encode(*centroid_coords, precision=self.gh_len - i)
+        return gh_centroid
 
     def __top_down_search(self, poly: Polygon) -> List[str]:
         # find top level geohashes intersecting polygon
-        top_level = self.__neighbour_bfs(poly, 1)
+        smallest_gh = self.__smallest_container(poly)
+        if smallest_gh is None:
+            top_level = self.__neighbour_bfs(poly, 1)
+        else:
+            top_level = [smallest_gh]
         overlaps = []
         for tgh in top_level:
             overlaps.extend(self.__search_gh_box(poly, tgh))
-        return []
+        return overlaps
 
     # TODO: return {geohash, polygon}
     def __gh_intersecting(self, poly: Polygon) -> List[str]:
@@ -151,9 +172,7 @@ class GeoTrieIndex:
         elif self.scan_algorithm == self.NEIGHBOUR_BFS:
             return self.__neighbour_bfs(poly, self.gh_len)
         elif self.scan_algorithm == self.TOP_DOWN:
-            a = self.__top_down_search(poly)
-            print(a)
-            return a
+            return self.__top_down_search(poly)
         else:
             raise Exception("Invalid scan algorithm")
 
@@ -188,5 +207,6 @@ class GeoTrieIndex:
                     print(k, "->", ', '.join([str(i) for i in v]))
                 else:
                     print(k, "->", len(v))
+
         print("walking...")
         self.gt.walk(print_formatted)
