@@ -12,7 +12,7 @@ import geohash_hilbert as ghh
 import numpy as np
 
 
-class FifoQueue:
+class FifoQueue(object):
     def __init__(self):
         self.__q = deque()
 
@@ -58,7 +58,7 @@ class GeoTrieIndex(SpatialIndex):
 
     def __init__(self, gh_len: int, scan_algorithm=SUBSAMPLE_GRID):
         self.gh_len = gh_len
-        self.gt = GeoTrie(gh_len)
+        self.gt = None
         self.scan_algorithm = scan_algorithm
 
     def __gh_encode(self, lon, lat):
@@ -180,7 +180,7 @@ class GeoTrieIndex(SpatialIndex):
             raise Exception("Invalid scan algorithm")
 
     def build(self, geo_df: GeoDataFrame):
-        self.gt.clear()
+        self.gt = GeoTrie(self.gh_len)
         df_columns = list(geo_df.columns)
         for i, row in geo_df.iterrows():
             polygons: List[Polygon] = row["geometry"].geoms
@@ -193,6 +193,8 @@ class GeoTrieIndex(SpatialIndex):
                     self.gt.insert(gh, gdp)
 
     def lookup(self, point: Point):
+        if self.gt is None:
+            raise ValueError("index is not built")
         gh = self.__gh_encode(*(point.coords[0]))
         candidates = self.gt.search(gh)
         containers = []
@@ -205,6 +207,9 @@ class GeoTrieIndex(SpatialIndex):
         return self.gt.search(gh)
 
     def show(self, long_format=False):
+        if self.gt is None:
+            raise ValueError("index is not built")
+
         def print_formatted(trie_dict: dict):
             for k, v in trie_dict.items():
                 if long_format:

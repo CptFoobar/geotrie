@@ -1,6 +1,7 @@
 import pygtrie as trie
 
-class GeoTrie:
+
+class GeoTrie(object):
     ''' An implementation of GeoTrie '''
 
     def __init__(self, gh_len):

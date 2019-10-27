@@ -53,7 +53,7 @@ class RTreeNode(BaseGeometryPoint):
         raise NotImplementedError("centroid of RTreeNode is not implemented")
 
 
-class STRTree:
+class STRTree(object):
     def __init__(self, node_capacity: int = 10):
         self._node_capacity = node_capacity
         self._root: RTreeNode = None
@@ -106,6 +106,8 @@ class STRTree:
         self._root = self.__pack_level(polygons)
 
     def search(self, point: Point) -> List[GeoDataPoint]:
+        if self._root is None:
+            raise ValueError("index is not built")
         return self._root.search(point)
 
 

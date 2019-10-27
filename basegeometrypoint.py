@@ -1,7 +1,7 @@
 from shapely.geometry import Point
 
 
-class BaseGeometryPoint:
+class BaseGeometryPoint(object):
     @property
     def bbox(self):
         raise NotImplementedError("bounding box of base geometry is not implemented")

@@ -2,7 +2,7 @@ from geopandas import GeoDataFrame
 from shapely.geometry import Point
 
 
-class SpatialIndex:
+class SpatialIndex(object):
     """Base class for spatial index"""
 
     def build(self, gdf: GeoDataFrame):

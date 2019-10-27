@@ -10,6 +10,7 @@ from geopandas.sindex import SpatialIndex
 from shapely.geometry import Point
 from shapely.strtree import STRtree
 
+from benchmark import BenchmarkSI
 from geotrieindex import GeoTrieIndex
 
 import time
@@ -46,64 +47,24 @@ def main():
     else:
         input_data = geojson
 
-    sti = STRTreeIndex()
-    print("building sti...")
-    begin = datetime.now()
-    sti.build(input_data)
-    t = datetime.now() - begin
-    print('building took {}s'.format(t.total_seconds()))
+    test_size = int(1e5)
+    b = BenchmarkSI("gti", "desc", test_size=test_size)
+    b.set_index(GeoTrieIndex)
+    b.set_dataset(input_data)
+    build_bm = b.benchmark_build(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
+    print('build: {}ms ± {}ms'.format(build_bm[0]*1e3, build_bm[1]*1e3))
+    lookup_bm = b.benchmark_lookup(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
+    print('lookup: {}ms ± {}ms'.format(lookup_bm[0]*1e3, build_bm[1]*1e3))
 
-    gti = GeoTrieIndex(gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
-    print('building td...')
-    begin = datetime.now()
-    gti.build(input_data)
-    t = datetime.now() - begin
-    print('building took {}s'.format(t.total_seconds()))
+    s = BenchmarkSI("sti", "desc", test_size=test_size)
+    s.set_index(STRTreeIndex)
+    s.set_dataset(input_data)
 
-    # testpt = (-73.96859385067378, 40.63536943789354)
-    # print(testpt)
-    # print(sti.lookup(Point(*testpt)))
-    # print(gti.lookup(Point(*testpt))[0])
-
-    max_bounds = geojson.bounds.max()
-    min_bounds = geojson.bounds.min()
-
-    max_lon = max_bounds["maxx"]
-    max_lat = max_bounds["maxy"]
-    min_lon = min_bounds["minx"]
-    min_lat = min_bounds["miny"]
-    test_size = int(1e6)
-    rx = (max_lon - min_lon) * np.random.random(test_size) + min_lon
-    ry = (max_lat - min_lat) * np.random.random(test_size) + min_lat
-
-    print('searching sti...')
-    found = 0
-    begin = current_milli_time()
-
-    for pt in zip(rx, ry):
-        pt_geom = Point(*pt)
-        if len(sti.lookup(pt_geom)) > 0:
-            found += 1
-    t = current_milli_time() - begin
-    print('searching took {}ms for {}/{} points'.format(t, found, test_size))
-    print('Found: {}/{}'.format(found, test_size))
-
-    print('searching gti...')
-    found = 0
-    begin = current_milli_time()
-
-    for pt in zip(rx, ry):
-        pt_geom = Point(*pt)
-        if len(gti.lookup(pt_geom)) > 0:
-            found += 1
-    t = current_milli_time() - begin
-    print('searching took {}ms for {}/{} points'.format(t, found, test_size))
-    print('Found: {}/{}'.format(found, test_size))
-
-    # gti.show(False)
+    build_bm = s.benchmark_build()
+    print('build: {}ms ± {}ms'.format(build_bm[0]*1e3, build_bm[1]*1e3))
+    lookup_bm = s.benchmark_lookup()
+    print('lookup: {}ms ± {}ms'.format(lookup_bm[0]*1e3, build_bm[1]*1e3))
 
 
 if __name__ == '__main__':
     main()
-
-#     -73.96859385067378, 40.63536943789354
