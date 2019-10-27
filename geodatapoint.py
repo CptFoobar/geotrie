@@ -1,8 +1,9 @@
-from shapely.geometry import Polygon
-import json
+from shapely.geometry import Polygon, Point
+
+from basegeometrypoint import BaseGeometryPoint
 
 
-class GeoDataPoint:
+class GeoDataPoint(BaseGeometryPoint):
     def __init__(self, meta: dict = None, poly: Polygon = None):
         if meta is None:
             meta = dict()
@@ -20,5 +21,15 @@ class GeoDataPoint:
         self.set_polygon(poly)
 
     def __str__(self):
-        # return str({"meta": self.meta, "poly": self.poly.exterior.coords.xy})
         return str({"meta": self.meta, "n_vertices": len(self.poly.exterior.coords)})
+
+    @property
+    def bbox(self):
+        return self.poly.bounds
+
+    @property
+    def centroid(self):
+        return self.poly.centroid.coords[0]
+
+    def contains(self, point: Point):
+        return self.poly.contains(point)

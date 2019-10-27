@@ -2,6 +2,8 @@ from datetime import datetime
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon, Point
 from shapely.geometry import shape
+
+from spatialindex import SpatialIndex
 from geodatapoint import GeoDataPoint
 from geotrie import GeoTrie
 from typing import List, Iterable, Union
@@ -33,13 +35,14 @@ class FifoQueue:
         return str(list(self.__q))
 
 
-class GeoTrieIndex:
+class GeoTrieIndex(SpatialIndex):
     """A geospatial index that using GeoTries as underlying data structure"""
 
     '''
     Two overlap discovery algorithms are provided:
     SUBSAMPLE_GRID: Divides bounding box of given polygon into a grid and maps select points in the grid as geohashes
     NEIGHBOUR_BFS: Performs BFS search on centroid of given polygon till it keeps finding neighbours that intersect
+    TOP_DOWN: Performs a top-down search of overlapping grids, starting from largest geohash(es) that contain polygon 
     '''
     SUBSAMPLE_GRID = 1
     NEIGHBOUR_BFS = 2
@@ -180,7 +183,7 @@ class GeoTrieIndex:
         self.gt.clear()
         df_columns = list(geo_df.columns)
         for i, row in geo_df.iterrows():
-            polygons: list[Polygon] = row["geometry"].geoms
+            polygons: List[Polygon] = row["geometry"].geoms
             # TODO: Check for non-polygon entries
             for poly in polygons:
                 meta = {column: row[column] for column in list(filter(lambda x: x != "geometry", df_columns))}
@@ -192,10 +195,11 @@ class GeoTrieIndex:
     def lookup(self, point: Point):
         gh = self.__gh_encode(*(point.coords[0]))
         candidates = self.gt.search(gh)
+        containers = []
         for c in candidates:
             if c.poly.contains(point):
-                return [c]
-        return []
+                containers.append(c)
+        return containers
 
     def gh_boxes(self, gh):
         return self.gt.search(gh)

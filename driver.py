@@ -5,10 +5,21 @@ import os
 import logging
 from datetime import datetime
 import numpy as np
+from geopandas.sindex import SpatialIndex
 
 from shapely.geometry import Point
+from shapely.strtree import STRtree
 
 from geotrieindex import GeoTrieIndex
+
+import time
+
+from strtreeindex import STRTreeIndex
+
+
+def current_milli_time():
+    return int(round(time.time() * 1000))
+
 
 def main():
     # TODO: Use logging
@@ -35,12 +46,24 @@ def main():
     else:
         input_data = geojson
 
+    sti = STRTreeIndex()
+    print("building sti...")
+    begin = datetime.now()
+    sti.build(input_data)
+    t = datetime.now() - begin
+    print('building took {}s'.format(t.total_seconds()))
+
     gti = GeoTrieIndex(gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
     print('building td...')
     begin = datetime.now()
     gti.build(input_data)
     t = datetime.now() - begin
     print('building took {}s'.format(t.total_seconds()))
+
+    # testpt = (-73.96859385067378, 40.63536943789354)
+    # print(testpt)
+    # print(sti.lookup(Point(*testpt)))
+    # print(gti.lookup(Point(*testpt))[0])
 
     max_bounds = geojson.bounds.max()
     min_bounds = geojson.bounds.min()
@@ -52,23 +75,35 @@ def main():
     test_size = int(1e6)
     rx = (max_lon - min_lon) * np.random.random(test_size) + min_lon
     ry = (max_lat - min_lat) * np.random.random(test_size) + min_lat
-    test_points = zip(rx, ry)
 
-    print('searching...')
+    print('searching sti...')
     found = 0
-    begin = datetime.now()
+    begin = current_milli_time()
 
-    for i in np.arange(test_size):
-        for pt in test_points:
-            pt_geom = Point(*pt)
-            if len(gti.lookup(pt_geom)) > 0:
-                found += 1
-    t = datetime.now() - begin
-    print('searching took {}s for {}/{} points'.format(t.total_seconds(), found, test_size))
-    print('Found: {}/1M'.format(found))
+    for pt in zip(rx, ry):
+        pt_geom = Point(*pt)
+        if len(sti.lookup(pt_geom)) > 0:
+            found += 1
+    t = current_milli_time() - begin
+    print('searching took {}ms for {}/{} points'.format(t, found, test_size))
+    print('Found: {}/{}'.format(found, test_size))
+
+    print('searching gti...')
+    found = 0
+    begin = current_milli_time()
+
+    for pt in zip(rx, ry):
+        pt_geom = Point(*pt)
+        if len(gti.lookup(pt_geom)) > 0:
+            found += 1
+    t = current_milli_time() - begin
+    print('searching took {}ms for {}/{} points'.format(t, found, test_size))
+    print('Found: {}/{}'.format(found, test_size))
 
     # gti.show(False)
 
 
 if __name__ == '__main__':
     main()
+
+#     -73.96859385067378, 40.63536943789354
