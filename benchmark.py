@@ -26,7 +26,7 @@ class BenchmarkRunner(object):
 
     def __timeit(self, fn, *args, **kwargs):
         begin = time.time()
-        for i in range(self.iterations):
+        for i in tqdm(range(self.iterations)):
             fn(*args, **kwargs)
         return time.time() - begin
 
@@ -73,9 +73,8 @@ class BenchmarkSI(BenchmarkRunner):
     def benchmark_build(self, *args, **kwargs):
         print('{}: running build {} times...'.format(self.name, self.iterations))
         times = np.array([])
-        for i in tqdm(range(self.iterations)):
-            total_runtime, _ = self.timeit(self._si(*args, **kwargs).build, self._dataset)
-            times = np.append(times, total_runtime)
+        total_runtime, _ = self.timeit(self._si(*args, **kwargs).build, self._dataset)
+        times = np.append(times, total_runtime)
         return times.mean(), times.std()
 
     def benchmark_lookup(self, *args, **kwargs):

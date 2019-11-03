@@ -217,12 +217,13 @@ function search_children(polygon p, prefix pfx, length l) {
 function lookup(point p, length l, Trie T) {
     g = geohash(p, l)
     candidates = T.search(g)
+    containers = []
     for c in candidates {
         if c contains p {
-            return c
+            containers.appendd(c)
         }
     }
-    return null
+    return containers
 }
 ```
 
@@ -230,5 +231,28 @@ function lookup(point p, length l, Trie T) {
 ## Optimization
 
 1. Use HAMTrie instead of regular Trie for space optimization
-2. Better alternative to BFS for neighbourhood scanning
-3. Check for precision of bboxes and point before comparing
+2. Use generators instead of lists where possible
+3. Cache geohashes and their polygons?
+
+## TODO
+
+1. Add support for region queries
+2. Add update logic (geotrie and strtree)
+3. Benchmark update logic
+4. Benchmark region queries
+5. Analyze disk access as a performance metric
+6. Line queries?
+
+```
+For rect (n,m), how many (a,b) rects can itersect it
+x = floor(n/a)
+y = floor(m/b)
+X = x+1
+Y = y+1
+p = 1 + ax - n
+q = 1 + by - n
+=> xy + 2(X + Y) + 3pq + 1
+
+for squares on square:
+=> x^2 + 4X + 4 + 3(1+ax-n)^2 + 1
+```

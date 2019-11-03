@@ -6,3 +6,4 @@ run_driver.sh
 *.ipynb
 **/__pycache__
 tmp
+*.csv

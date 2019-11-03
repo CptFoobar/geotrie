@@ -168,7 +168,6 @@ class GeoTrieIndex(SpatialIndex):
             overlaps.extend(self.__search_gh_box(poly, tgh))
         return overlaps
 
-    # TODO: return {geohash, polygon}
     def __gh_intersecting(self, poly: Polygon) -> List[str]:
         if self.scan_algorithm == self.SUBSAMPLE_GRID:
             return self.__subsample_grid(poly)
