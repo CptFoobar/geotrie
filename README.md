@@ -153,7 +153,7 @@ function subsampling(polygon p, length l) {
 
     for sample in subsamples {
         if sample.bbox intersects poly {
-            overlaps.appendd(sample)
+            overlaps.append(sample)
         }   
     }
     return overlaps  
@@ -220,7 +220,7 @@ function lookup(point p, length l, Trie T) {
     containers = []
     for c in candidates {
         if c contains p {
-            containers.appendd(c)
+            containers.append(c)
         }
     }
     return containers

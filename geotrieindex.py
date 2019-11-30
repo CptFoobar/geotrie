@@ -182,7 +182,12 @@ class GeoTrieIndex(SpatialIndex):
         self.gt = GeoTrie(self.gh_len)
         df_columns = list(geo_df.columns)
         for i, row in geo_df.iterrows():
-            polygons: List[Polygon] = row["geometry"].geoms
+            polygons: List[Polygon] = []
+            if isinstance(row["geometry"], Polygon):
+                polygons = [row["geometry"]]
+            else:
+                polygons = row["geometry"].geoms
+
             # TODO: Check for non-polygon entries
             for poly in polygons:
                 meta = {column: row[column] for column in list(filter(lambda x: x != "geometry", df_columns))}
