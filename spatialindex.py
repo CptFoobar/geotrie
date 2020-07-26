@@ -1,5 +1,5 @@
 from geopandas import GeoDataFrame
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 
 
 class SpatialIndex(object):
@@ -9,7 +9,10 @@ class SpatialIndex(object):
         raise NotImplementedError("build index is not implemented")
 
     def lookup(self, p: Point):
-        raise NotImplementedError("lookup index is not implemented")
+        raise NotImplementedError("lookup is not implemented")
 
     def show(self):
-        raise NotImplementedError("show index is not implemented")
+        raise NotImplementedError("show is not implemented")
+
+    def overlaps(self, p: Polygon):
+        raise NotImplementedError("overlaps is not implemented")

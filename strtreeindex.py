@@ -32,3 +32,6 @@ class STRTreeIndex(SpatialIndex):
 
     def show(self):
         raise NotImplementedError("show is not implemented for STRTreeIndex")
+
+    def overlaps(self, p: Polygon):
+        return self.strtree.intersects(p)

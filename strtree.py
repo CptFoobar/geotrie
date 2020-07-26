@@ -2,6 +2,7 @@ from abc import ABC
 from typing import List, Union
 
 from shapely.geometry import Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 from geodatapoint import GeoDataPoint
 from basegeometrypoint import BaseGeometryPoint
@@ -32,6 +33,23 @@ class RTreeNode(BaseGeometryPoint):
                     containers.append(e)
 
         return containers
+
+    def intersects(self, geometry: BaseGeometry) -> List[BaseGeometryPoint]:
+        if self.is_empty:
+            return []
+
+        if not self._mbr_poly.intersects(geometry):
+            return []
+
+        containers = list()
+        for e in self.entries:
+            if e.intersects(geometry):
+                if isinstance(e, RTreeNode):
+                    containers.extend(e.intersects(geometry))
+                else:
+                    containers.append(e)
+
+        return list(set(containers))
 
     def contains(self, point: Point):
         return self._mbr_poly.contains(point)
@@ -110,4 +128,7 @@ class STRTree(object):
             raise ValueError("index is not built")
         return self._root.search(point)
 
-
+    def intersects(self, geometry: BaseGeometry):
+        if self._root is None:
+            raise ValueError("index is not built")
+        return self._root.intersects(geometry)

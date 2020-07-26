@@ -1,4 +1,5 @@
 from shapely.geometry import Polygon, Point
+from shapely.geometry.base import BaseGeometry
 
 from basegeometrypoint import BaseGeometryPoint
 
@@ -33,3 +34,6 @@ class GeoDataPoint(BaseGeometryPoint):
 
     def contains(self, point: Point):
         return self.poly.contains(point)
+
+    def intersects(self, geometry: BaseGeometryPoint):
+        return self.poly.intersects(geometry)

@@ -8,8 +8,9 @@ from datetime import datetime
 import numpy as np
 from geopandas.sindex import SpatialIndex
 
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 from shapely.strtree import STRtree
+from tqdm import tqdm
 
 from benchmark import BenchmarkSI
 from geotrieindex import GeoTrieIndex
@@ -48,55 +49,77 @@ def main():
     else:
         input_data = geojson
 
-    bm_results = []
-    bm_columns = ['index_type', 'op', 'op_count', 'total_time_ms', 'ops_per_sec', 'remark']
-    iters = 5
-    test_size = int(1e6)
+    gti = GeoTrieIndex(gh_len)
+    gti.build(input_data)
 
-    b = BenchmarkSI("gti", "desc", test_size=test_size)
-    b.set_index(GeoTrieIndex)
-    b.set_dataset(input_data)
-    b.iterations = iters
-    build_bm = b.benchmark_build(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
-    print('build: {}ms ± {}ms'.format(build_bm[0] * 1e3, build_bm[1] * 1e3))
-    lookup_bm = b.benchmark_lookup(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
-    print('lookup: {}ms ± {}ms'.format(lookup_bm[0] * 1e3, lookup_bm[1] * 1e3))
+    sti = STRTreeIndex()
+    sti.build(input_data)
 
-    bm_results.append(['geotrie', 'build', 1, build_bm[0] * 1e3, 1 / build_bm[0],
-                       'gh_len={} scan_algorithm=SUBSAMPLE_GRID iterations={}'.format(gh_len, b.iterations)])
-    bm_results.append(['geotrie', 'lookup', test_size, lookup_bm[0] * 1e3, test_size / lookup_bm[0],
-                       'gh_len={} scan_algorithm=SUBSAMPLE_GRID iterations={}'.format(gh_len, b.iterations)])
+    # max_bounds = input_data.bounds.max()
+    # min_bounds = input_data.bounds.min()
+    #
+    # max_lon = max_bounds["maxx"]
+    # max_lat = max_bounds["maxy"]
+    # min_lon = min_bounds["minx"]
+    # min_lat = min_bounds["miny"]
 
+    # -73.92261294314002,40.55628162435524,-73.91268998222618,40.56466438890167
+    qp = Polygon([[-73.92261294314102, 40.55628162435625], [-73.92261294314102, 40.56466438890200],
+                  [-73.91268998222518, 40.56466438890200], [-73.91268998222518, 40.55628162435625]])
+
+    # qp = Polygon([[-73.92261294314102, 40.55628162435625], [-70, 35], [-73.92261294314102, 40.55628162435625]])
+
+    kmap = {}
+    print("from gti")
+
+    for k in tqdm(range(1)):
+        o = gti.overlaps(qp)
+        kmap[len(o)] = 1 if len(o) not in kmap.keys() else kmap[len(o)] + 1
+    print(kmap)
+
+    kmap = {}
+    print("from sti")
+
+    for k in tqdm(range(1)):
+        o = sti.overlaps(qp)
+        kmap[len(o)] = 1 if len(o) not in kmap.keys() else kmap[len(o)] + 1
+    print(kmap)
+    # print(qp.wkt)
+    # bm_results = []
+    # bm_columns = ['index_type', 'op', 'op_count', 'total_time_ms', 'ops_per_sec', 'remark']
+    # iterations = 1
+    # test_size = int(1e5)
+    #
     # b = BenchmarkSI("gti", "desc", test_size=test_size)
     # b.set_index(GeoTrieIndex)
     # b.set_dataset(input_data)
-    # b.iterations = iters
-    # build_bm = b.benchmark_build(gh_len=gh_len, scan_algorithm=GeoTrieIndex.NEIGHBOUR_BFS)
+    # b.iterations = iterations
+    # build_bm = b.benchmark_build(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
     # print('build: {}ms ± {}ms'.format(build_bm[0] * 1e3, build_bm[1] * 1e3))
-    # lookup_bm = b.benchmark_lookup(gh_len=gh_len, scan_algorithm=GeoTrieIndex.NEIGHBOUR_BFS)
+    # lookup_bm = b.benchmark_lookup(gh_len=gh_len, scan_algorithm=GeoTrieIndex.SUBSAMPLE_GRID)
     # print('lookup: {}ms ± {}ms'.format(lookup_bm[0] * 1e3, lookup_bm[1] * 1e3))
     #
     # bm_results.append(['geotrie', 'build', 1, build_bm[0] * 1e3, 1 / build_bm[0],
-    #                    'gh_len={} scan_algorithm=NEIGHBOUR_BFS iterations={}'.format(gh_len, b.iterations)])
+    #                    'gh_len={} scan_algorithm=SUBSAMPLE_GRID iterations={}'.format(gh_len, b.iterations)])
     # bm_results.append(['geotrie', 'lookup', test_size, lookup_bm[0] * 1e3, test_size / lookup_bm[0],
-    #                    'gh_len={} scan_algorithm=NEIGHBOUR_BFS iterations={}'.format(gh_len, b.iterations)])
-
-    s = BenchmarkSI("sti", "desc", test_size=test_size)
-    s.set_index(STRTreeIndex)
-    s.set_dataset(input_data)
-    s.iterations = iters
-    build_bm = s.benchmark_build()
-    print('build: {}ms ± {}ms'.format(build_bm[0] * 1e3, build_bm[1] * 1e3))
-    lookup_bm = s.benchmark_lookup(node_capacity=5)
-    print('lookup: {}ms ± {}ms'.format(lookup_bm[0] * 1e3, lookup_bm[1] * 1e3))
-
-    bm_results.append(['strtree', 'build', 1, build_bm[0] * 1e3, 1 / build_bm[0],
-                       'node_capacity=5 iterations={}'.format(s.iterations)])
-    bm_results.append(['strtree', 'lookup', test_size, lookup_bm[0] * 1e3, test_size / lookup_bm[0],
-                       'node_capacity=5 iterations={}'.format(s.iterations)])
-
-    bm_df = pd.DataFrame(bm_results, columns=bm_columns)
-    bm_df.to_csv("bm_all_10iter_nydata.csv", index=False)
+    #                    'gh_len={} scan_algorithm=SUBSAMPLE_GRID iterations={}'.format(gh_len, b.iterations)])
+    #
+    # s = BenchmarkSI("sti", "desc", test_size=test_size)
+    # s.set_index(STRTreeIndex)
+    # s.set_dataset(input_data)
+    # s.iterations = iterations
+    # build_bm = s.benchmark_build()
+    # print('build: {}ms ± {}ms'.format(build_bm[0] * 1e3, build_bm[1] * 1e3))
+    # lookup_bm = s.benchmark_lookup()
+    # print('lookup: {}ms ± {}ms'.format(lookup_bm[0] * 1e3, lookup_bm[1] * 1e3))
+    #
+    # bm_results.append(['strtree', 'build', 1, build_bm[0] * 1e3, 1 / build_bm[0],
+    #                    'node_capacity=10 iterations={}'.format(s.iterations)])
+    # bm_results.append(['strtree', 'lookup', test_size, lookup_bm[0] * 1e3, test_size / lookup_bm[0],
+    #                    'node_capacity=10 iterations={}'.format(s.iterations)])
+    #
+    # bm_df = pd.DataFrame(bm_results, columns=bm_columns)
+    # bm_df.to_csv("tmp.csv", index=False)
 
 
 if __name__ == '__main__':

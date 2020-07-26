@@ -1,4 +1,5 @@
 from shapely.geometry import Point
+from shapely.geometry.base import BaseGeometry
 
 
 class BaseGeometryPoint(object):
@@ -12,3 +13,6 @@ class BaseGeometryPoint(object):
 
     def contains(self, point: Point):
         raise NotImplementedError("contains of base geometry is not implemented")
+
+    def intersects(self, geometry: BaseGeometry):
+        raise NotImplementedError("intersects of base geometry is not implemented")

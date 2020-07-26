@@ -57,12 +57,12 @@ class GeoTrieIndex(SpatialIndex):
     )  # = 64    0x30 - 0x7A
 
     def __init__(self, gh_len: int, scan_algorithm=SUBSAMPLE_GRID):
-        self.gh_len = gh_len
-        self.gt = None
-        self.scan_algorithm = scan_algorithm
+        self._gh_len = gh_len
+        self._gt = None
+        self._scan_algorithm = scan_algorithm
 
     def __gh_encode(self, lon, lat):
-        return ghh.encode(lon, lat, precision=self.gh_len)
+        return ghh.encode(lon, lat, precision=self._gh_len)
 
     @classmethod
     def __gh_intersects_poly(cls, gh: str, poly: Polygon):
@@ -112,7 +112,7 @@ class GeoTrieIndex(SpatialIndex):
 
     # TODO: Make this a generator
     def __matrix_geohashes(self, poly) -> List:
-        precision_box = ghh.rectangle(''.join(["0" for _ in range(self.gh_len)]))["bbox"]
+        precision_box = ghh.rectangle(''.join(["0" for _ in range(self._gh_len)]))["bbox"]
         grid_intercept = min(abs(precision_box[0] - precision_box[2]), abs(precision_box[1] - precision_box[3]))
         poly_bbox = poly.bounds
         subsamples = set()
@@ -131,7 +131,7 @@ class GeoTrieIndex(SpatialIndex):
 
     def __search_gh_box(self, poly: Polygon, prefix: str) -> List[str]:
         # Check if geohash of required length intersects polygon. if so, it is part of the solution
-        if len(prefix) == self.gh_len:
+        if len(prefix) == self._gh_len:
             return [prefix] if self.__gh_intersects_poly(prefix, poly) else []
 
         # If prefix doesn't intersect polygon, none of its children will.
@@ -151,9 +151,9 @@ class GeoTrieIndex(SpatialIndex):
         i = 0
         while not self.__gh_contains_poly(gh_centroid, poly):
             i += 1
-            if i == self.gh_len:
+            if i == self._gh_len:
                 return None
-            gh_centroid = ghh.encode(*centroid_coords, precision=self.gh_len - i)
+            gh_centroid = ghh.encode(*centroid_coords, precision=self._gh_len - i)
         return gh_centroid
 
     def __top_down_search(self, poly: Polygon) -> List[str]:
@@ -169,17 +169,17 @@ class GeoTrieIndex(SpatialIndex):
         return overlaps
 
     def __gh_intersecting(self, poly: Polygon) -> List[str]:
-        if self.scan_algorithm == self.SUBSAMPLE_GRID:
+        if self._scan_algorithm == self.SUBSAMPLE_GRID:
             return self.__subsample_grid(poly)
-        elif self.scan_algorithm == self.NEIGHBOUR_BFS:
-            return self.__neighbour_bfs(poly, self.gh_len)
-        elif self.scan_algorithm == self.TOP_DOWN:
+        elif self._scan_algorithm == self.NEIGHBOUR_BFS:
+            return self.__neighbour_bfs(poly, self._gh_len)
+        elif self._scan_algorithm == self.TOP_DOWN:
             return self.__top_down_search(poly)
         else:
             raise Exception("Invalid scan algorithm")
 
     def build(self, geo_df: GeoDataFrame):
-        self.gt = GeoTrie(self.gh_len)
+        self._gt = GeoTrie(self._gh_len)
         df_columns = list(geo_df.columns)
         for i, row in geo_df.iterrows():
             polygons: List[Polygon] = []
@@ -194,13 +194,13 @@ class GeoTrieIndex(SpatialIndex):
                 gdp = GeoDataPoint(meta, poly)
                 geos = self.__gh_intersecting(poly)
                 for gh in geos:
-                    self.gt.insert(gh, gdp)
+                    self._gt.insert(gh, gdp)
 
     def lookup(self, point: Point):
-        if self.gt is None:
+        if self._gt is None:
             raise ValueError("index is not built")
         gh = self.__gh_encode(*(point.coords[0]))
-        candidates = self.gt.search(gh)
+        candidates = self._gt.search(gh)
         containers = []
         for c in candidates:
             if c.poly.contains(point):
@@ -208,10 +208,12 @@ class GeoTrieIndex(SpatialIndex):
         return containers
 
     def gh_boxes(self, gh):
-        return self.gt.search(gh)
+        if self._gt is None:
+            raise ValueError("index is not built")
+        return self._gt.search(gh)
 
     def show(self, long_format=False):
-        if self.gt is None:
+        if self._gt is None:
             raise ValueError("index is not built")
 
         def print_formatted(trie_dict: dict):
@@ -222,4 +224,17 @@ class GeoTrieIndex(SpatialIndex):
                     print(k, "->", len(v))
 
         print("walking...")
-        self.gt.walk(print_formatted)
+        self._gt.walk(print_formatted)
+
+    def overlaps(self, poly: Polygon) -> List[GeoDataPoint]:
+        if self._gt is None:
+            raise ValueError("index is not built")
+        overlapping_gh = self.__subsample_grid(poly)
+        for gh in overlapping_gh:
+            candidates = self._gt.search(gh)
+            containers = set()
+            for c in candidates:
+                if c.poly.intersects(poly):
+                    containers.add(c)
+            return list(containers)
+
